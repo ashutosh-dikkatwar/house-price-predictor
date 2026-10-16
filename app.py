@@ -41,8 +41,38 @@ LIMITS = {
 }
 
 
+# Model predicts in US dollars -> convert to Indian rupees.
+# Update this rate whenever you want (1 USD = ? INR).
+# If your model was already trained on rupee prices, set this to 1.0
+USD_TO_INR = 88.0
+
+
+def indian_format(n: float) -> str:
+    """Format a number with Indian digit grouping, e.g. 4,65,56,100."""
+    s = str(int(round(n)))
+    if len(s) <= 3:
+        return s
+    last3, rest = s[-3:], s[:-3]
+    groups = []
+    while len(rest) > 2:
+        groups.insert(0, rest[-2:])
+        rest = rest[:-2]
+    if rest:
+        groups.insert(0, rest)
+    return ",".join(groups + [last3])
+
+
 def money(x: float) -> str:
-    return "${:,.0f}".format(x)
+    return "\u20b9" + indian_format(x)
+
+
+def money_words(x: float) -> str:
+    """Easy-to-read form: '₹3.88 Crore' / '₹45.20 Lakh'."""
+    if x >= 1e7:
+        return f"\u20b9{x / 1e7:.2f} Crore"
+    if x >= 1e5:
+        return f"\u20b9{x / 1e5:.2f} Lakh"
+    return money(x)
 
 
 def quality_word(q: float) -> str:
@@ -357,7 +387,7 @@ def predict():
         values.append(val)
 
     x = np.array([values], dtype=float)
-    price = float(model.predict(x)[0])
+    price = float(model.predict(x)[0]) * USD_TO_INR  # USD -> INR
 
     if price <= 0:
         return jsonify(
@@ -375,8 +405,8 @@ def predict():
         f"{beds:g} bedroom{'s' if beds != 1 else ''} and {baths:g} bathroom{'s' if baths != 1 else ''}, "
         f"built in {int(year)}, on a {lot:g}-acre lot with space for {garage:g} car{'s' if garage != 1 else ''} "
         f"in a neighborhood rated {quality_word(quality)} ({quality:g}/10) "
-        f"is estimated to be worth around {money(price)}. "
-        f"Most similar homes would fall between {money(low)} and {money(high)}."
+        f"is estimated to be worth around {money_words(price)} ({money(price)}). "
+        f"Most similar homes would fall between {money_words(low)} and {money_words(high)}."
     )
 
     return jsonify(
